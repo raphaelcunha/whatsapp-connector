@@ -3,15 +3,9 @@
 Connect WhatsApp to Claude Code, Codex, and any MCP-compatible agent from a
 native macOS menu bar app.
 
-[Download WhatsApp Connector for macOS](releases/WhatsApp-Connector-1.0.dmg)
+[Download WhatsApp Connector for macOS](https://github.com/raphaelcunha/whatsapp-connector/releases/download/v1.0/WhatsApp-Connector-1.0.dmg)
 
 ![WhatsApp Connector QR Code onboarding](docs/images/onboarding-qr.png)
-
-Local release file:
-
-```text
-/Users/raphael/Developer/WhatsAppMCP/releases/WhatsApp-Connector-1.0.dmg
-```
 
 ## Why WhatsApp Connector
 
@@ -39,7 +33,7 @@ the app to Applications, scan a QR Code, and use the menu bar icon.
 
 ## Install
 
-1. [Download the DMG](releases/WhatsApp-Connector-1.0.dmg).
+1. [Download the DMG](https://github.com/raphaelcunha/whatsapp-connector/releases/download/v1.0/WhatsApp-Connector-1.0.dmg).
 2. Open the DMG.
 3. Drag **WhatsApp Connector** to **Applications**.
 4. Open the app.
