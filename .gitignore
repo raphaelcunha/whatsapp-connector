@@ -1,0 +1,60 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+
+# Xcode / Swift generated files
+build/
+DerivedData/
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.moved-aside
+*.hmap
+*.ipa
+*.app
+*.dSYM/
+*.xcarchive/
+
+# Release artifacts
+dist/
+*.dmg
+*.pkg
+*.zip
+!releases/
+!releases/*.dmg
+
+# Logs and diagnostic output
+*.log
+*.trace
+*.crash
+notary-*.json
+notary-*.log
+
+# Local secrets and machine-specific config
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.cer
+*.mobileprovision
+*.provisionprofile
+*.key
+*.token
+.netrc
+
+# Dependency caches
+.build/
+.swiftpm/
+Package.resolved
+
+# Editor state
+.vscode/
+.idea/
+*.swp
+*.swo

@@ -1,0 +1,55 @@
+name: WhatsAppConnector
+options:
+  bundleIdPrefix: app.whatsappconnector
+  createIntermediateGroups: true
+  deploymentTarget:
+    macOS: "14.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGNING_REQUIRED: "YES"
+    CODE_SIGNING_ALLOWED: "YES"
+    DEVELOPMENT_TEAM: ""
+    ENABLE_HARDENED_RUNTIME: "NO"
+    ENABLE_USER_SCRIPT_SANDBOXING: "NO"
+    GENERATE_INFOPLIST_FILE: "NO"
+    CODE_SIGN_INJECT_BASE_ENTITLEMENTS: "NO"
+    PRODUCT_NAME: "WhatsApp Connector"
+targets:
+  WhatsAppConnector:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: Sources/WhatsAppConnector
+      - path: Resources/Assets.xcassets
+    info:
+      path: Resources/Info.plist
+      properties:
+        CFBundleName: WhatsApp Connector
+        CFBundleDisplayName: WhatsApp Connector
+        CFBundleExecutable: $(EXECUTABLE_NAME)
+        CFBundleIdentifier: $(PRODUCT_BUNDLE_IDENTIFIER)
+        CFBundleInfoDictionaryVersion: "6.0"
+        CFBundlePackageType: APPL
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        LSApplicationCategoryType: public.app-category.utilities
+        LSMinimumSystemVersion: "14.0"
+        LSUIElement: true
+        NSHumanReadableCopyright: "© 2026 Raphael Cunha"
+        NSAppleEventsUsageDescription: Used to launch Terminal for the WhatsApp QR code.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.whatsappconnector.mac
+        PRODUCT_NAME: "WhatsApp Connector"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        DEVELOPMENT_TEAM: ""
+        ENABLE_HARDENED_RUNTIME: "NO"
+        CODE_SIGN_ENTITLEMENTS: Resources/WhatsAppConnector.entitlements
+        COMBINE_HIDPI_IMAGES: "YES"
