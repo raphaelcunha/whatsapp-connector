@@ -565,9 +565,12 @@ private enum AgentOption: String, CaseIterable {
 }
 
 private struct AgentSetupPage: View {
+    @EnvironmentObject var state: AppState
+    @Environment(\.openWindow) private var openWindow
     let advance: () -> Void
     let back: () -> Void
     @AppStorage("preferredAgent") private var selectedAgentRaw: String = AgentOption.claude.rawValue
+    @State private var actionStateByClient: [OnboardingMCPClient: OnboardingMCPActionState] = [:]
 
     private var selectedAgent: AgentOption {
         get { AgentOption(rawValue: selectedAgentRaw) ?? .claude }
@@ -590,6 +593,28 @@ private struct AgentSetupPage: View {
                     ForEach(AgentOption.allCases, id: \.self) { option in
                         AgentOptionRow(option: option, isSelected: option == selectedAgent) {
                             selectedAgent = option
+                        }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("MCP clients")
+                            .font(.system(size: 13, weight: .semibold))
+                        Text("Register WhatsApp Connector with your AI client or copy the manual setup text.")
+                            .font(.system(size: 12.5))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    VStack(spacing: 10) {
+                        ForEach(OnboardingMCPClient.allCases, id: \.self) { client in
+                            OnboardingMCPRow(
+                                client: client,
+                                actionState: actionStateByClient[client] ?? .idle,
+                                isInstalled: state.bridge.isInstalled(),
+                                install: { configure(client) },
+                                copy: { copyManualSetup(for: client) }
+                            )
                         }
                     }
                 }
@@ -618,6 +643,48 @@ private struct AgentSetupPage: View {
                 .frame(width: 300)
         }
         .padding(44)
+    }
+
+    private func configure(_ client: OnboardingMCPClient) {
+        state.refresh()
+        guard state.bridge.isInstalled() else {
+            actionStateByClient[client] = .error("Open setup")
+            NSApp.activate(ignoringOtherApps: true)
+            openWindow(id: "installer")
+            return
+        }
+
+        actionStateByClient[client] = .installing
+
+        Task {
+            let result: MCPConfigurationResult
+            switch client {
+            case .claude:
+                result = await MCPConfigurator.installClaude(bridge: state.bridge)
+            case .codex:
+                result = await MCPConfigurator.installCodex(bridge: state.bridge)
+            case .other:
+                copyManualSetup(for: client)
+                return
+            }
+
+            actionStateByClient[client] = result.success ? .success : .error("Try again")
+            state.refresh()
+        }
+    }
+
+    private func copyManualSetup(for client: OnboardingMCPClient) {
+        let text = client.manualSetup(bridge: state.bridge)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        actionStateByClient[client] = .copied
+
+        Task {
+            try? await Task.sleep(nanoseconds: 1_600_000_000)
+            if actionStateByClient[client] == .copied {
+                actionStateByClient[client] = .idle
+            }
+        }
     }
 }
 
@@ -660,6 +727,162 @@ private struct AgentOptionRow: View {
         }
         .buttonStyle(.plain)
     }
+}
+
+private enum OnboardingMCPClient: String, CaseIterable {
+    case claude
+    case codex
+    case other
+
+    var title: String {
+        switch self {
+        case .claude: return "Claude Code"
+        case .codex: return "Codex"
+        case .other: return "Other MCP client"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .claude: return "sparkles"
+        case .codex: return "terminal.fill"
+        case .other: return "square.stack.3d.up.fill"
+        }
+    }
+
+    var message: String {
+        switch self {
+        case .claude:
+            return "Install automatically through Claude when available, with config-file fallback."
+        case .codex:
+            return "Write the WhatsApp MCP server into your Codex config."
+        case .other:
+            return "Copy the command and args for any MCP-compatible client."
+        }
+    }
+
+    var primaryButtonTitle: String {
+        switch self {
+        case .claude: return "Install in Claude"
+        case .codex: return "Install in Codex"
+        case .other: return "Copy setup"
+        }
+    }
+
+    var copyButtonTitle: String {
+        switch self {
+        case .claude: return "Copy command"
+        case .codex: return "Copy config"
+        case .other: return "Copy setup"
+        }
+    }
+
+    func manualSetup(bridge: BridgeController) -> String {
+        switch self {
+        case .claude:
+            return MCPConfigurator.claudeManualSetup(bridge: bridge)
+        case .codex:
+            return MCPConfigurator.codexManualSetup(bridge: bridge)
+        case .other:
+            return MCPConfigurator.otherManualSetup(bridge: bridge)
+        }
+    }
+}
+
+private struct OnboardingMCPRow: View {
+    let client: OnboardingMCPClient
+    let actionState: OnboardingMCPActionState
+    let isInstalled: Bool
+    let install: () -> Void
+    let copy: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: client.icon)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 34, height: 34)
+                .background(Color.accentColor.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(client.title)
+                    .font(.system(size: 13.5, weight: .semibold))
+                Text(isInstalled ? client.message : "Run setup first, then configure this MCP client.")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .layoutPriority(1)
+
+            Spacer(minLength: 8)
+
+            HStack(spacing: 8) {
+                Button(copyButtonTitle, action: copy)
+                    .controlSize(.small)
+
+                Button(action: install) {
+                    HStack(spacing: 6) {
+                        if actionState == .installing {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                        Text(installButtonTitle)
+                    }
+                }
+                .controlSize(.small)
+                .buttonStyle(.borderedProminent)
+                .tint(installButtonTint)
+                .disabled(actionState == .installing)
+            }
+        }
+        .padding(10)
+        .background(Color(nsColor: .textBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .stroke(Color.secondary.opacity(0.12), lineWidth: 1)
+        )
+    }
+
+    private var installButtonTitle: String {
+        switch actionState {
+        case .idle:
+            return isInstalled ? client.primaryButtonTitle : "Open setup"
+        case .installing:
+            return "Installing..."
+        case .success:
+            return "Installed"
+        case .error(let title):
+            return title
+        case .copied:
+            return isInstalled ? client.primaryButtonTitle : "Open setup"
+        }
+    }
+
+    private var copyButtonTitle: String {
+        actionState == .copied ? "Copied" : client.copyButtonTitle
+    }
+
+    private var installButtonTint: Color {
+        switch actionState {
+        case .success:
+            return .green
+        case .error:
+            return .orange
+        default:
+            return .accentColor
+        }
+    }
+}
+
+private enum OnboardingMCPActionState: Equatable {
+    case idle
+    case installing
+    case success
+    case error(String)
+    case copied
 }
 
 private struct AgentConfigPreview: View {

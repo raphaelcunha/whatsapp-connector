@@ -35,8 +35,8 @@ targets:
         CFBundleIdentifier: $(PRODUCT_BUNDLE_IDENTIFIER)
         CFBundleInfoDictionaryVersion: "6.0"
         CFBundlePackageType: APPL
-        CFBundleShortVersionString: "2.0"
-        CFBundleVersion: "2"
+        CFBundleShortVersionString: "2.1"
+        CFBundleVersion: "3"
         LSApplicationCategoryType: public.app-category.utilities
         LSMinimumSystemVersion: "14.0"
         LSUIElement: true
