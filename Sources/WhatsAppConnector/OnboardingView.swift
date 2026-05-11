@@ -531,116 +531,57 @@ private struct InstructionRow: View {
 
 // MARK: - Page 3: Agent setup
 
-private enum AgentOption: String, CaseIterable {
-    case claude
-    case codex
-    case other
-
-    var title: String {
-        switch self {
-        case .claude: return "Claude Code"
-        case .codex: return "Codex"
-        case .other: return "Other agent"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .claude: return "sparkles"
-        case .codex: return "terminal.fill"
-        case .other: return "square.stack.3d.up.fill"
-        }
-    }
-
-    var detail: String {
-        switch self {
-        case .claude:
-            return "Configured automatically at the end of setup."
-        case .codex:
-            return "Use the MCP configuration below in your Codex environment."
-        case .other:
-            return "Copy the same details into any MCP client."
-        }
-    }
-}
-
 private struct AgentSetupPage: View {
     @EnvironmentObject var state: AppState
     @Environment(\.openWindow) private var openWindow
     let advance: () -> Void
     let back: () -> Void
-    @AppStorage("preferredAgent") private var selectedAgentRaw: String = AgentOption.claude.rawValue
     @State private var actionStateByClient: [OnboardingMCPClient: OnboardingMCPActionState] = [:]
 
-    private var selectedAgent: AgentOption {
-        get { AgentOption(rawValue: selectedAgentRaw) ?? .claude }
-        nonmutating set { selectedAgentRaw = newValue.rawValue }
-    }
-
     var body: some View {
-        HStack(spacing: 32) {
-            VStack(alignment: .leading, spacing: 22) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Choose your agent")
-                        .font(.system(size: 31, weight: .bold))
-                    Text("WhatsApp Connector works with Claude Code, Codex, and other MCP-compatible clients.")
-                        .font(.system(size: 15))
-                        .foregroundStyle(.secondary)
-                        .lineSpacing(3)
-                }
+        VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Choose your agent")
+                    .font(.system(size: 31, weight: .bold))
+                Text("Register WhatsApp Connector with your AI client or copy the manual setup text.")
+                    .font(.system(size: 15))
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(3)
+            }
 
+            VStack(alignment: .leading, spacing: 10) {
+                Text("MCP clients")
+                    .font(.system(size: 13, weight: .semibold))
                 VStack(spacing: 10) {
-                    ForEach(AgentOption.allCases, id: \.self) { option in
-                        AgentOptionRow(option: option, isSelected: option == selectedAgent) {
-                            selectedAgent = option
-                        }
+                    ForEach(OnboardingMCPClient.allCases, id: \.self) { client in
+                        OnboardingMCPRow(
+                            client: client,
+                            actionState: actionStateByClient[client] ?? .idle,
+                            isInstalled: state.bridge.isInstalled(),
+                            install: { configure(client) },
+                            copy: { copyManualSetup(for: client) }
+                        )
                     }
-                }
-
-                VStack(alignment: .leading, spacing: 10) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("MCP clients")
-                            .font(.system(size: 13, weight: .semibold))
-                        Text("Register WhatsApp Connector with your AI client or copy the manual setup text.")
-                            .font(.system(size: 12.5))
-                            .foregroundStyle(.secondary)
-                    }
-
-                    VStack(spacing: 10) {
-                        ForEach(OnboardingMCPClient.allCases, id: \.self) { client in
-                            OnboardingMCPRow(
-                                client: client,
-                                actionState: actionStateByClient[client] ?? .idle,
-                                isInstalled: state.bridge.isInstalled(),
-                                install: { configure(client) },
-                                copy: { copyManualSetup(for: client) }
-                            )
-                        }
-                    }
-                }
-
-                Spacer()
-
-                HStack {
-                    Button("Back", action: back)
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
-                    Spacer()
-                    Button(action: advance) {
-                        HStack(spacing: 8) {
-                            Text("Continue")
-                            Image(systemName: "arrow.right")
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .keyboardShortcut(.defaultAction)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
 
-            AgentConfigPreview(option: selectedAgent)
-                .frame(width: 300)
+            Spacer()
+
+            HStack {
+                Button("Back", action: back)
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                Spacer()
+                Button(action: advance) {
+                    HStack(spacing: 8) {
+                        Text("Continue")
+                        Image(systemName: "arrow.right")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .keyboardShortcut(.defaultAction)
+            }
         }
         .padding(44)
     }
@@ -685,47 +626,6 @@ private struct AgentSetupPage: View {
                 actionStateByClient[client] = .idle
             }
         }
-    }
-}
-
-private struct AgentOptionRow: View {
-    let option: AgentOption
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 13) {
-                Image(systemName: option.icon)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(isSelected ? Color.accentColor : .secondary)
-                    .frame(width: 42, height: 42)
-                    .background((isSelected ? Color.accentColor : Color.secondary).opacity(0.10))
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(option.title)
-                        .font(.system(size: 14.5, weight: .semibold))
-                    Text(option.detail)
-                        .font(.system(size: 12.5))
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary.opacity(0.45))
-            }
-            .padding(13)
-            .background(Color(nsColor: .textBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    .stroke(isSelected ? Color.accentColor.opacity(0.45) : Color.secondary.opacity(0.12), lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
     }
 }
 
@@ -797,28 +697,32 @@ private struct OnboardingMCPRow: View {
     let copy: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: client.icon)
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 34, height: 34)
-                .background(Color.accentColor.opacity(0.10))
-                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                Image(systemName: client.icon)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 34, height: 34)
+                    .background(Color.accentColor.opacity(0.10))
+                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(client.title)
-                    .font(.system(size: 13.5, weight: .semibold))
-                Text(isInstalled ? client.message : "Run setup first, then configure this MCP client.")
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(client.title)
+                        .font(.system(size: 13.5, weight: .semibold))
+                    Text(isInstalled ? client.message : "Run setup first, then configure this MCP client.")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .layoutPriority(1)
+
+                Spacer(minLength: 0)
             }
-            .layoutPriority(1)
-
-            Spacer(minLength: 8)
 
             HStack(spacing: 8) {
+                Spacer(minLength: 0)
+
                 Button(copyButtonTitle, action: copy)
                     .controlSize(.small)
 
@@ -883,81 +787,6 @@ private enum OnboardingMCPActionState: Equatable {
     case success
     case error(String)
     case copied
-}
-
-private struct AgentConfigPreview: View {
-    let option: AgentOption
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack {
-                Image(systemName: option.icon)
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(Color.accentColor)
-                Text(option.title)
-                    .font(.system(size: 18, weight: .bold))
-                Spacer()
-            }
-
-            Text(previewMessage)
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
-                .lineSpacing(3)
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("MCP Configuration")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                Text(configSnippet)
-                    .font(.system(size: 11.5, design: .monospaced))
-                    .textSelection(.enabled)
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(nsColor: .controlBackgroundColor))
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            }
-
-            Spacer()
-        }
-        .padding(22)
-        .frame(height: 390)
-        .background(Color(nsColor: .textBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .shadow(color: .black.opacity(0.10), radius: 28, x: 0, y: 16)
-    }
-
-    private var previewMessage: String {
-        switch option {
-        case .claude:
-            return "The installer adds WhatsApp Connector to Claude Code automatically. Nothing to copy."
-        case .codex:
-            return "Use these details if you want to configure Codex manually."
-        case .other:
-            return "Any MCP client can use the command below as a local server."
-        }
-    }
-
-    private var configSnippet: String {
-        switch option {
-        case .claude:
-            return "claude mcp add whatsapp --scope user -- uv --directory ~/src/whatsapp-mcp/whatsapp-mcp-server run main.py"
-        case .codex:
-            return """
-            [mcp_servers.whatsapp]
-            command = "uv"
-            args = ["--directory", "~/src/whatsapp-mcp/whatsapp-mcp-server", "run", "main.py"]
-            """
-        case .other:
-            return """
-            command: uv
-            args:
-              - --directory
-              - ~/src/whatsapp-mcp/whatsapp-mcp-server
-              - run
-              - main.py
-            """
-        }
-    }
 }
 
 // MARK: - Page 4: Success
