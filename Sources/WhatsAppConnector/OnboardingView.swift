@@ -3,6 +3,7 @@ import AppKit
 
 struct OnboardingView: View {
     @EnvironmentObject var state: AppState
+    @Environment(\.openWindow) private var openWindow
     @State private var page: Int = 0
 
     private let totalPages = 4
@@ -14,7 +15,10 @@ struct OnboardingView: View {
             VStack(spacing: 0) {
                 ZStack {
                     if page == 0 {
-                        PresentationPage(advance: advance)
+                        PresentationPage(
+                            isInstalled: state.bridge.isInstalled(),
+                            advance: advanceFromPresentation
+                        )
                             .transition(slide)
                     }
                     if page == 1 {
@@ -48,10 +52,10 @@ struct OnboardingView: View {
         }
         .frame(width: 820, height: 620)
         .onAppear {
-            page = state.requestedOnboardingPage
+            applyRequestedPage(state.requestedOnboardingPage)
         }
         .onChange(of: state.requestedOnboardingPage) { _, requestedPage in
-            page = requestedPage
+            applyRequestedPage(requestedPage)
         }
     }
 
@@ -67,6 +71,33 @@ struct OnboardingView: View {
         page += 1
     }
 
+    private func advanceFromPresentation() {
+        state.refresh()
+        guard state.bridge.isInstalled() else {
+            openInstaller()
+            closeOnboardingWindow()
+            return
+        }
+        advance()
+    }
+
+    private func applyRequestedPage(_ requestedPage: Int) {
+        let targetPage = min(max(requestedPage, 0), totalPages - 1)
+        state.refresh()
+        guard targetPage != 1 || state.bridge.isInstalled() else {
+            page = 0
+            openInstaller()
+            closeOnboardingWindow()
+            return
+        }
+        page = targetPage
+    }
+
+    private func openInstaller() {
+        NSApp.activate(ignoringOtherApps: true)
+        openWindow(id: "installer")
+    }
+
     private func back() {
         guard page > 0 else { return }
         page -= 1
@@ -75,6 +106,10 @@ struct OnboardingView: View {
     private func close() {
         state.markInitialOnboardingCompleted()
         state.refresh()
+        closeOnboardingWindow()
+    }
+
+    private func closeOnboardingWindow() {
         if let win = NSApp.windows.first(where: { $0.identifier?.rawValue == "onboarding" }) {
             win.close()
         }
@@ -99,6 +134,7 @@ private struct OnboardingBackground: View {
 // MARK: - Page 1: Presentation
 
 private struct PresentationPage: View {
+    let isInstalled: Bool
     let advance: () -> Void
 
     var body: some View {
@@ -130,7 +166,7 @@ private struct PresentationPage: View {
 
                 Button(action: advance) {
                     HStack(spacing: 8) {
-                        Text("Get started")
+                        Text(isInstalled ? "Get started" : "Install")
                         Image(systemName: "arrow.right")
                     }
                     .font(.system(size: 14, weight: .semibold))
@@ -277,22 +313,28 @@ private struct PreviewNotificationRow: View {
 
 private struct QRCodePage: View {
     @EnvironmentObject var state: AppState
+    @Environment(\.openWindow) private var openWindow
     let advance: () -> Void
     let back: () -> Void
     @StateObject private var runner = BridgeRunner()
     @State private var didAutoAdvance: Bool = false
+    @State private var canBypassQRCode: Bool = false
 
     private var isConnected: Bool {
         runner.connected
+    }
+
+    private var canContinue: Bool {
+        isConnected || canBypassQRCode
     }
 
     var body: some View {
         HStack(spacing: 34) {
             VStack(alignment: .leading, spacing: 24) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Generate QR Code")
+                    Text(canBypassQRCode ? "WhatsApp already connected" : "Generate QR Code")
                         .font(.system(size: 31, weight: .bold))
-                    Text("Open WhatsApp on your phone, go to Linked Devices, and scan the code on the right.")
+                    Text(canBypassQRCode ? "This Mac already has a linked WhatsApp session and the local service is running." : "Open WhatsApp on your phone, go to Linked Devices, and scan the code on the right.")
                         .font(.system(size: 15))
                         .foregroundStyle(.secondary)
                         .lineSpacing(3)
@@ -314,23 +356,19 @@ private struct QRCodePage: View {
 
                     Spacer()
 
-                    Button(isConnected ? "Continue" : "Waiting for scan") {
-                        if isConnected {
-                            runner.stop()
-                            state.refresh()
-                            advance()
-                        }
+                    Button(primaryButtonTitle) {
+                        continueAfterQRCode()
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(!isConnected)
-                    .opacity(isConnected ? 1 : 0.55)
+                    .disabled(!canContinue)
+                    .opacity(canContinue ? 1 : 0.55)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            QRPanel(isConnected: isConnected, qrCode: runner.qrCode, error: runner.lastError)
+            QRPanel(isConnected: isConnected, canBypass: canBypassQRCode, qrCode: runner.qrCode, error: runner.lastError)
                 .frame(width: 300)
         }
         .padding(44)
@@ -344,12 +382,34 @@ private struct QRCodePage: View {
 
     private func startCapture() {
         didAutoAdvance = false
+        state.refresh()
         guard state.bridge.isInstalled() else {
-            runner.lastError = "WhatsApp Connector must be installed before it can generate a QR Code."
+            runner.lastError = "Run setup first so WhatsApp Connector can prepare the local bridge."
+            NSApp.activate(ignoringOtherApps: true)
+            openWindow(id: "installer")
             return
         }
+
+        canBypassQRCode = state.bridge.hasSession() && state.runStatus == .running
+        guard !canBypassQRCode else {
+            runner.stop()
+            return
+        }
+
         state.bridge.resetSessionForPairing()
         runner.start(binary: state.bridge.bridgeBinary, workdir: state.bridge.bridgeDir)
+    }
+
+    private var primaryButtonTitle: String {
+        if canBypassQRCode { return "Skip QR Code" }
+        return isConnected ? "Continue" : "Waiting for scan"
+    }
+
+    private func continueAfterQRCode() {
+        guard canContinue else { return }
+        runner.stop()
+        state.refresh()
+        advance()
     }
 
     private func finishConnection() {
@@ -369,6 +429,7 @@ private struct QRCodePage: View {
 
 private struct QRPanel: View {
     let isConnected: Bool
+    let canBypass: Bool
     let qrCode: String?
     let error: String?
 
@@ -379,13 +440,18 @@ private struct QRPanel: View {
                     .fill(Color(nsColor: .textBackgroundColor))
                     .shadow(color: .black.opacity(0.10), radius: 28, x: 0, y: 16)
 
-                if isConnected {
+                if isConnected || canBypass {
                     VStack(spacing: 14) {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 68, weight: .semibold))
                             .foregroundStyle(.green)
-                        Text("WhatsApp connected")
+                        Text(canBypass ? "Already connected" : "WhatsApp connected")
                             .font(.system(size: 17, weight: .semibold))
+                        if canBypass {
+                            Text("No new QR scan needed.")
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 } else if let qrCode,
                           let img = QRRenderer.image(from: qrCode) {
@@ -428,9 +494,9 @@ private struct QRPanel: View {
 
             HStack(spacing: 8) {
                 Circle()
-                    .fill(isConnected ? .green : .orange)
+                    .fill((isConnected || canBypass) ? .green : .orange)
                     .frame(width: 8, height: 8)
-                Text(isConnected ? "Device linked" : "Waiting for your phone to scan")
+                Text((isConnected || canBypass) ? "Ready to continue" : "Waiting for your phone to scan")
                     .font(.system(size: 12.5, weight: .medium))
                     .foregroundStyle(.secondary)
             }

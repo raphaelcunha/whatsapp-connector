@@ -46,7 +46,7 @@ struct WhatsAppConnectorApp: App {
         Window("WhatsApp Connector Settings", id: "settings") {
             SettingsView()
                 .environmentObject(state)
-                .frame(minWidth: 620, minHeight: 430)
+                .frame(minWidth: 760, minHeight: 620)
         }
         .windowResizability(.contentSize)
 

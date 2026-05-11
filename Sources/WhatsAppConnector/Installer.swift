@@ -277,14 +277,15 @@ final class Installer {
 
     @MainActor
     private func registerMCP(_ state: AppState) async -> Bool {
-        let bridge = state.bridge
-        let configURL = bridge.home.appendingPathComponent(".claude.json")
-        let uvPath = "/opt/homebrew/bin/uv" // brew already installed it
-        let serverPath = bridge.serverDir.path
         let preferredAgent = UserDefaults.standard.string(forKey: "preferredAgent") ?? "claude"
 
         if preferredAgent == "codex" {
-            return registerCodexMCP(state: state, uvPath: uvPath, serverPath: serverPath)
+            let result = await MCPConfigurator.installCodex(bridge: state.bridge)
+            state.appendLog(result.message, stream: result.success ? .success : .failure)
+            if let detail = result.detail {
+                state.appendLog(detail, stream: result.success ? .info : .stderr)
+            }
+            return result.success
         }
 
         if preferredAgent == "other" {
@@ -292,91 +293,11 @@ final class Installer {
             return true
         }
 
-        // Try the official CLI first
-        let cliCheck = ShellRunner.runSync("/bin/bash", ["-lc", "command -v claude"])
-        if cliCheck.exitCode == 0 {
-            state.appendLog("Registering via 'claude mcp add'…", stream: .info)
-            let cmd = "claude mcp add whatsapp --scope user -- '\(uvPath)' --directory '\(serverPath)' run main.py"
-            let code = await ShellRunner.runShellStream(cmd) { line, isErr in
-                Task { @MainActor in state.appendLog(line, stream: isErr ? .stderr : .stdout) }
-            }
-            if code == 0 {
-                state.appendLog("✓ Registered with Claude Code", stream: .success)
-                return true
-            }
-            state.appendLog("'claude mcp add' returned \(code) — falling back to direct edit", stream: .stderr)
+        let result = await MCPConfigurator.installClaude(bridge: state.bridge)
+        state.appendLog(result.message, stream: result.success ? .success : .failure)
+        if let detail = result.detail {
+            state.appendLog(detail, stream: result.success ? .info : .stderr)
         }
-
-        // Fallback: edit ~/.claude.json directly
-        state.appendLog("Editing \(configURL.path) directly…", stream: .info)
-        var json: [String: Any] = [:]
-        if let data = try? Data(contentsOf: configURL),
-           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            json = obj
-        }
-        var servers = (json["mcpServers"] as? [String: Any]) ?? [:]
-        servers["whatsapp"] = [
-            "type": "stdio",
-            "command": uvPath,
-            "args": ["--directory", serverPath, "run", "main.py"],
-            "env": [String: String]()
-        ]
-        json["mcpServers"] = servers
-        do {
-            let data = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys])
-            try data.write(to: configURL, options: .atomic)
-            state.appendLog("✓ Wrote MCP entry to \(configURL.path)", stream: .success)
-            return true
-        } catch {
-            state.appendLog("Failed to write claude config: \(error)", stream: .failure)
-            return false
-        }
-    }
-
-    @MainActor
-    private func registerCodexMCP(state: AppState, uvPath: String, serverPath: String) -> Bool {
-        let configURL = state.bridge.home.appendingPathComponent(".codex/config.toml")
-        let block = """
-
-        [mcp_servers.whatsapp]
-        command = "\(uvPath)"
-        args = ["--directory", "\(serverPath)", "run", "main.py"]
-        """
-
-        do {
-            try FileManager.default.createDirectory(at: configURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-            let existing = (try? String(contentsOf: configURL, encoding: .utf8)) ?? ""
-            let updated = replacingTOMLBlock(named: "mcp_servers.whatsapp", in: existing, with: block)
-            try updated.write(to: configURL, atomically: true, encoding: .utf8)
-            state.appendLog("✓ Registered with Codex", stream: .success)
-            return true
-        } catch {
-            state.appendLog("Failed to write Codex config: \(error)", stream: .failure)
-            return false
-        }
-    }
-
-    private func replacingTOMLBlock(named name: String, in content: String, with replacement: String) -> String {
-        let lines = content.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-        let header = "[\(name)]"
-
-        guard let start = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == header }) else {
-            let separator = content.hasSuffix("\n") || content.isEmpty ? "" : "\n"
-            return content + separator + replacement.trimmingCharacters(in: .newlines) + "\n"
-        }
-
-        var end = start + 1
-        while end < lines.count {
-            let trimmed = lines[end].trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("[") && trimmed.hasSuffix("]") {
-                break
-            }
-            end += 1
-        }
-
-        var updated = Array(lines[..<start])
-        updated.append(contentsOf: replacement.trimmingCharacters(in: .newlines).split(separator: "\n", omittingEmptySubsequences: false).map(String.init))
-        updated.append(contentsOf: lines[end...])
-        return updated.joined(separator: "\n") + "\n"
+        return result.success
     }
 }
